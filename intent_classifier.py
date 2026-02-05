@@ -59,9 +59,10 @@ CLASSIFICATION_SCHEMA = {
         "is_talent_management": {"type": "boolean"},
         "confidence": {"type": "number", "minimum": 0, "maximum": 1},
         "topic": {"type": ["string", "null"]},
-        "reasoning": {"type": "string"}
+        "reasoning": {"type": "string"},
+        "summary": {"type": "string"}
     },
-    "required": ["is_talent_management", "confidence", "topic", "reasoning"],
+    "required": ["is_talent_management", "confidence", "topic", "reasoning", "summary"],
     "additionalProperties": False
 }
 
@@ -89,7 +90,11 @@ Rules:
 - Choose the single most relevant topic from the list above
 - If ambiguous, choose the most likely topic
 - If NOT about Talent Management, set is_talent_management to false and topic to null
-- Confidence should reflect classification certainty (0.0-1.0)"""),
+- Confidence should reflect classification certainty (0.0-1.0)
+- Generate a brief, helpful summary (1-2 sentences) that:
+  - Acknowledges what the user is asking about
+  - If TM-related, mentions you'll provide relevant resources
+  - Is natural and conversational, not robotic"""),
                 UserMessage(content="Classify this query: {{?user_query}}")
             ],
             response_format=ResponseFormatJsonSchema(
@@ -214,6 +219,7 @@ Rules:
         is_tm = llm_result.get("is_talent_management", False)
         topic = llm_result.get("topic")
         confidence = llm_result.get("confidence", 0.5)
+        summary = llm_result.get("summary", "")
 
         if is_tm and topic and topic in TOPIC_LINKS:
             topic_info = TOPIC_LINKS[topic]
@@ -223,7 +229,7 @@ Rules:
                 "topic": topic,
                 "topic_display_name": topic_info["display_name"],
                 "links": topic_info["links"],
-                "summary": f"Your question is about {topic_info['display_name']}. Here are helpful resources.",
+                "summary": summary,
             }
         else:
             return {
@@ -232,7 +238,7 @@ Rules:
                 "topic": None,
                 "topic_display_name": None,
                 "links": [],
-                "summary": "This query doesn't appear to be related to Talent Management.",
+                "summary": summary,
             }
 
     def _extract_pipeline_details(self, original_query: str, result) -> dict:
@@ -345,7 +351,7 @@ Rules:
                 "topic": None,
                 "topic_display_name": None,
                 "links": [],
-                "summary": "[MOCK] This query doesn't appear to be related to Talent Management.",
+                "summary": "[MOCK] This doesn't seem to be a Talent Management question. I can help with topics like performance reviews, time off, learning, and more.",
             }
 
         # Simple keyword-based mock classification (order matters for priority)
@@ -430,7 +436,7 @@ Rules:
                     "topic": topic,
                     "topic_display_name": topic_info["display_name"],
                     "links": topic_info["links"],
-                    "summary": f"[MOCK] Your question is about {topic_info['display_name']}. Here are helpful resources.",
+                    "summary": f"[MOCK] I can help you with {topic_info['display_name']}. Here are some resources that should answer your question.",
                 }
 
         return {
@@ -439,7 +445,7 @@ Rules:
             "topic": None,
             "topic_display_name": None,
             "links": [],
-            "summary": "[MOCK] This query doesn't appear to be related to Talent Management.",
+            "summary": "[MOCK] This doesn't seem to be a Talent Management question. I can help with topics like performance reviews, time off, learning, and more.",
         }
 
     def _fallback_response(self, query: str) -> dict:
