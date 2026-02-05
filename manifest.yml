@@ -1,0 +1,16 @@
+---
+applications:
+  - name: tm-intent-classifier
+    memory: 256M
+    disk_quota: 512M
+    instances: 1
+    buildpacks:
+      - python_buildpack
+    command: uvicorn app:app --host 0.0.0.0 --port $PORT
+    health-check-type: http
+    health-check-http-endpoint: /health
+    timeout: 120
+    env:
+      PYTHON_VERSION: 3.11.x
+    services:
+      - aicore-service  # Bind to existing AI Core service instance
