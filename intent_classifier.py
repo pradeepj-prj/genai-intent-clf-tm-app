@@ -20,12 +20,12 @@ from topic_links import TOPIC_LINKS, get_topics_for_prompt
 # Lazy imports for GenAI Hub SDK (may not be available locally)
 try:
     from gen_ai_hub.proxy.core.proxy_clients import get_proxy_client
-    from gen_ai_hub.proxy.langchain.openai import ChatOpenAI
+    from gen_ai_hub.proxy.native.openai import OpenAI
     GENAI_HUB_AVAILABLE = True
 except ImportError:
     GENAI_HUB_AVAILABLE = False
     get_proxy_client = None
-    ChatOpenAI = None
+    OpenAI = None
 
 logger = logging.getLogger(__name__)
 
@@ -51,12 +51,7 @@ class IntentClassifier:
             # 2. CF service binding (VCAP_SERVICES)
             proxy_client = get_proxy_client("gen-ai-hub")
 
-            self._llm = ChatOpenAI(
-                proxy_client=proxy_client,
-                proxy_model_name="gpt-4",
-                temperature=0.1,  # Low temperature for consistent classification
-                max_tokens=500,
-            )
+            self._llm = OpenAI(proxy_client=proxy_client)
             logger.info("GenAI Hub client initialized successfully")
         except Exception as e:
             logger.warning(f"Failed to initialize GenAI Hub client: {e}")
@@ -121,15 +116,25 @@ Respond ONLY with the JSON object, no additional text."""
                 return self._mock_classify(query)
 
             prompt = self._build_classification_prompt(query)
-            response = self._llm.invoke(prompt)
+            response = self._llm.chat.completions.create(
+                model="gpt-4o",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.1,
+                max_tokens=500,
+            )
 
-            # Parse the JSON response
-            result = json.loads(response.content)
+            # Parse the JSON response (strip markdown code blocks if present)
+            content = response.choices[0].message.content.strip()
+            if content.startswith("```"):
+                # Remove markdown code block wrapper
+                lines = content.split("\n")
+                content = "\n".join(lines[1:-1]) if lines[-1] == "```" else "\n".join(lines[1:])
+            result = json.loads(content)
 
             return self._format_response(result)
 
         except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse LLM response: {e}")
+            logger.error(f"Failed to parse LLM response: {e}. Raw: {response.choices[0].message.content[:200] if response else 'None'}")
             return self._fallback_response(query)
         except Exception as e:
             logger.error(f"Classification error: {e}")
